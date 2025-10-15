@@ -79,28 +79,35 @@ class _CameraScreenState extends State<CameraScreen> {
       }
 
       // Find the best back-facing camera (prefer camera2 0, then any back camera)
-      _currentCameraIndex = 0;
+      int? camera2_0_index;
+      int? anyBackCameraIndex;
 
-      // First, look for "camera2 0" specifically (main back camera)
+      // Search through all cameras to find camera2 0 and any back camera
       for (var i = 0; i < _availableCameras.length; i++) {
         final label = _availableCameras[i].label?.toLowerCase() ?? '';
+
+        // Check for camera2 0 specifically
         if (label.contains('camera2 0') && label.contains('back')) {
-          _currentCameraIndex = i;
-          debugPrint('🎯 Starting with main back camera (camera2 0) at index $_currentCameraIndex');
-          break;
+          camera2_0_index = i;
+          break; // Found the best camera, stop searching
+        }
+
+        // Track first back camera as fallback
+        if (anyBackCameraIndex == null && (label.contains('back') || label.contains('environment'))) {
+          anyBackCameraIndex = i;
         }
       }
 
-      // If camera2 0 not found, use any back-facing camera
-      if (_currentCameraIndex == 0) {
-        for (var i = 0; i < _availableCameras.length; i++) {
-          final label = _availableCameras[i].label?.toLowerCase() ?? '';
-          if (label.contains('back') || label.contains('environment')) {
-            _currentCameraIndex = i;
-            debugPrint('🎯 Starting with back camera at index $_currentCameraIndex');
-            break;
-          }
-        }
+      // Set camera index with priority: camera2 0 > any back camera > first camera (0)
+      if (camera2_0_index != null) {
+        _currentCameraIndex = camera2_0_index;
+        debugPrint('🎯 Starting with main back camera (camera2 0) at index $_currentCameraIndex');
+      } else if (anyBackCameraIndex != null) {
+        _currentCameraIndex = anyBackCameraIndex;
+        debugPrint('🎯 Starting with back camera at index $_currentCameraIndex');
+      } else {
+        _currentCameraIndex = 0;
+        debugPrint('🎯 Starting with first available camera at index $_currentCameraIndex');
       }
 
       setState(() {

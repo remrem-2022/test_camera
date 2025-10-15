@@ -68639,26 +68639,22 @@ d=A.a3(new A.aE(d,new A.a9E(),c),c.h("j.E"))
 n.cx=d
 A.bf().$1("\ud83d\udcf9 Found "+d.length+" camera(s):")
 for(k=0;d=k,c=n.cx,d<c.length;++k){j=c[k]
-A.bf().$1("  ["+A.k(k)+"] "+A.k(j.label)+" (ID: "+A.k(j.deviceId)+")")}n.db=0
-for(i=0;d=i,c=n.cx,d<c.length;++i){d=c[i].label
+A.bf().$1("  ["+A.k(k)+"] "+A.k(j.label)+" (ID: "+A.k(j.deviceId)+")")}i=null
+h=null
+for(g=0;d=g,c=n.cx,d<c.length;++g){d=c[g].label
 b=d==null?null:d.toLowerCase()
-h=b==null?"":b
-d=h
+f=b==null?"":b
+d=f
 c=J.aJ(d)
 a=c.gn(d)
 if(0>a)A.a_(A.bN(0,0,c.gn(d),null,null))
-if(A.Ci(d,"camera2 0",0)){d=h
+if(A.Ci(d,"camera2 0",0)){d=f
 c=J.aJ(d)
 a=c.gn(d)
 if(0>a)A.a_(A.bN(0,0,c.gn(d),null,null))
 d=A.Ci(d,"back",0)}else d=!1
-if(d){d=i
-n.db=d
-A.bf().$1("\ud83c\udfaf Starting with main back camera (camera2 0) at index "+A.k(d))
-break}}if(n.db===0)for(g=0;d=g,c=n.cx,d<c.length;++g){d=c[g].label
-h=d==null?null:d.toLowerCase()
-f=h==null?"":h
-d=f
+if(d){i=g
+break}if(h==null){d=f
 c=J.aJ(d)
 a=c.gn(d)
 if(0>a)A.a_(A.bN(0,0,c.gn(d),null,null))
@@ -68666,11 +68662,13 @@ if(!A.Ci(d,"back",0)){d=f
 c=J.aJ(d)
 a=c.gn(d)
 if(0>a)A.a_(A.bN(0,0,c.gn(d),null,null))
-d=A.Ci(d,"environment",0)}else d=!0
-if(d){d=g
+d=A.Ci(d,"environment",0)}else d=!0}else d=!1
+if(d)h=g}if(i!=null){d=i
 n.db=d
-A.bf().$1("\ud83c\udfaf Starting with back camera at index "+A.k(d))
-break}}n.ai(new A.a9F(n))
+A.bf().$1("\ud83c\udfaf Starting with main back camera (camera2 0) at index "+A.k(d))}else if(h!=null){d=h
+n.db=d
+A.bf().$1("\ud83c\udfaf Starting with back camera at index "+A.k(d))}else{n.db=0
+A.bf().$1("\ud83c\udfaf Starting with first available camera at index 0")}n.ai(new A.a9F(n))
 if(n.cy)A.bf().$1("\u2705 Multiple cameras available - flip button will be shown")
 else A.bf().$1("\u26a0\ufe0f Only one camera available - flip button will be hidden")
 p=2

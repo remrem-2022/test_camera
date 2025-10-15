@@ -605,11 +605,11 @@ class _CameraScreenState extends State<CameraScreen> {
                   items: _availableCameras.asMap().entries.map((entry) {
                     final index = entry.key;
                     final camera = entry.value;
-                    final label = camera.label ?? '';
+                    final label = camera.label ?? 'Camera $index';
                     return DropdownMenuItem<int>(
                       value: index,
                       child: Text(
-                        label.isNotEmpty ? label : 'Camera $index',
+                        label,
                         style: const TextStyle(fontSize: 14),
                       ),
                     );

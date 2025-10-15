@@ -69167,8 +69167,7 @@ return null},
 $S:0}
 A.a9U.prototype={
 $1(a){var s=null,r=a.a,q=a.b.label
-if(q==null)q=""
-return new A.ms(r,A.iL(q.length!==0?q:"Camera "+A.k(r),s,s,s,B.Ni,s,s),B.jk,s,t.kZ)},
+return new A.ms(r,A.iL(q==null?"Camera "+A.k(r):q,s,s,s,B.Ni,s,s),B.jk,s,t.kZ)},
 $S:437}
 A.a9V.prototype={
 $1(a){var s=this.a,r=s.db

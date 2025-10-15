@@ -421,6 +421,15 @@ class _CameraScreenState extends State<CameraScreen> {
     final previousIndex = _currentCameraIndex;
     debugPrint('🔄 Switching from camera index $previousIndex');
 
+    // Stop current stream first
+    _stopCameraStream();
+
+    // Clear video element source
+    _videoElement.srcObject = null;
+
+    // Small delay to ensure cleanup
+    await Future.delayed(const Duration(milliseconds: 50));
+
     setState(() {
       _isCameraReady = false; // Show loading while switching
     });
@@ -433,7 +442,9 @@ class _CameraScreenState extends State<CameraScreen> {
     // Restart camera with new device
     await _startCamera();
 
-    debugPrint('✅ Camera switched (device: $_currentDeviceId)');
+    debugPrint(
+      '✅ Camera switched to: ${_availableCameras[_currentCameraIndex].label}',
+    );
   }
 
   Future<void> _selectCamera(int cameraIndex) async {
@@ -443,6 +454,15 @@ class _CameraScreenState extends State<CameraScreen> {
     }
 
     debugPrint('📹 Selecting camera index $cameraIndex');
+
+    // Stop current stream first
+    _stopCameraStream();
+
+    // Clear video element source
+    _videoElement.srcObject = null;
+
+    // Small delay to ensure cleanup
+    await Future.delayed(const Duration(milliseconds: 100));
 
     setState(() {
       _currentCameraIndex = cameraIndex;

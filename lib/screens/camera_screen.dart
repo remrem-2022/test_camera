@@ -20,7 +20,8 @@ class _CameraScreenState extends State<CameraScreen> {
   // Storage arrays for captured pages
   List<XFile> _capturedImages = [];
   List<Uint8List> _capturedImageBytes = []; // Store original bytes for preview
-  List<String> _uploadedFileIds = []; // Empty string = pending, fileId = uploaded
+  List<String> _uploadedFileIds =
+      []; // Empty string = pending, fileId = uploaded
 
   // UI State
   bool _showCamera = false;
@@ -37,7 +38,8 @@ class _CameraScreenState extends State<CameraScreen> {
       'camera-video-${DateTime.now().millisecondsSinceEpoch}';
   int _cameraRebuildKey = 0; // Key to force HtmlElementView rebuild
   String? _currentDeviceId; // Track current camera device ID
-  List<html.MediaDeviceInfo> _availableCameras = []; // List of available cameras
+  List<html.MediaDeviceInfo> _availableCameras =
+      []; // List of available cameras
   bool _hasMultipleCameras = false; // Whether device has multiple cameras
   int _currentCameraIndex = 0; // Index in available cameras list
 
@@ -66,6 +68,25 @@ class _CameraScreenState extends State<CameraScreen> {
         return;
       }
 
+      // 🔑 KEY FIX: Request permission first to get full device list with labels
+      try {
+        debugPrint('🔐 Requesting camera permission...');
+        final permissionStream = await mediaDevices.getUserMedia({
+          'video': true,
+        });
+
+        // Stop the permission stream immediately - we just needed it to trigger permission
+        permissionStream.getTracks().forEach((track) => track.stop());
+        debugPrint('✅ Camera permission granted');
+
+        // Small delay to ensure browser updates device list
+        await Future.delayed(const Duration(milliseconds: 100));
+      } catch (e) {
+        debugPrint('⚠️ Failed to get camera permission: $e');
+        // Continue anyway - might still get some devices
+      }
+
+      // NOW enumerate devices - this will show all cameras with proper labels
       final devices = await mediaDevices.enumerateDevices();
       _availableCameras = devices
           .whereType<html.MediaDeviceInfo>()
@@ -78,36 +99,39 @@ class _CameraScreenState extends State<CameraScreen> {
         debugPrint('  [$i] ${camera.label} (ID: ${camera.deviceId})');
       }
 
-      // Find the best back-facing camera (prefer camera2 0, then any back camera)
+      // Rest of your existing logic...
       int? camera2_0_index;
       int? anyBackCameraIndex;
 
-      // Search through all cameras to find camera2 0 and any back camera
       for (var i = 0; i < _availableCameras.length; i++) {
         final label = _availableCameras[i].label?.toLowerCase() ?? '';
 
-        // Check for camera2 0 specifically
         if (label.contains('camera2 0') && label.contains('back')) {
           camera2_0_index = i;
-          break; // Found the best camera, stop searching
+          break;
         }
 
-        // Track first back camera as fallback
-        if (anyBackCameraIndex == null && (label.contains('back') || label.contains('environment'))) {
+        if (anyBackCameraIndex == null &&
+            (label.contains('back') || label.contains('environment'))) {
           anyBackCameraIndex = i;
         }
       }
 
-      // Set camera index with priority: camera2 0 > any back camera > first camera (0)
       if (camera2_0_index != null) {
         _currentCameraIndex = camera2_0_index;
-        debugPrint('🎯 Starting with main back camera (camera2 0) at index $_currentCameraIndex');
+        debugPrint(
+          '🎯 Starting with main back camera (camera2 0) at index $_currentCameraIndex',
+        );
       } else if (anyBackCameraIndex != null) {
         _currentCameraIndex = anyBackCameraIndex;
-        debugPrint('🎯 Starting with back camera at index $_currentCameraIndex');
+        debugPrint(
+          '🎯 Starting with back camera at index $_currentCameraIndex',
+        );
       } else {
         _currentCameraIndex = 0;
-        debugPrint('🎯 Starting with first available camera at index $_currentCameraIndex');
+        debugPrint(
+          '🎯 Starting with first available camera at index $_currentCameraIndex',
+        );
       }
 
       setState(() {
@@ -166,9 +190,12 @@ class _CameraScreenState extends State<CameraScreen> {
       _stopCameraStream();
 
       // Request camera access using deviceId if we have cameras enumerated
-      if (_availableCameras.isNotEmpty && _currentCameraIndex < _availableCameras.length) {
+      if (_availableCameras.isNotEmpty &&
+          _currentCameraIndex < _availableCameras.length) {
         final selectedCamera = _availableCameras[_currentCameraIndex];
-        debugPrint('📸 Requesting camera by deviceId: ${selectedCamera.deviceId}');
+        debugPrint(
+          '📸 Requesting camera by deviceId: ${selectedCamera.deviceId}',
+        );
         debugPrint('   Camera: ${selectedCamera.label}');
 
         try {
@@ -323,7 +350,8 @@ class _CameraScreenState extends State<CameraScreen> {
         _isCameraReady = false;
         _showCamera = false;
         _showPreview = true;
-        _currentPreviewIndex = _capturedImages.length - 1; // Preview the just-captured image
+        _currentPreviewIndex =
+            _capturedImages.length - 1; // Preview the just-captured image
       });
 
       debugPrint('✅ Image captured (${_capturedImages.length} total)');
@@ -356,7 +384,8 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   void _deleteCurrentPreview() {
-    if (_currentPreviewIndex >= 0 && _currentPreviewIndex < _capturedImages.length) {
+    if (_currentPreviewIndex >= 0 &&
+        _currentPreviewIndex < _capturedImages.length) {
       setState(() {
         _capturedImages.removeAt(_currentPreviewIndex);
         _capturedImageBytes.removeAt(_currentPreviewIndex);
@@ -444,13 +473,16 @@ class _CameraScreenState extends State<CameraScreen> {
         }
 
         setState(() {
-          _uploadProgress = 'Uploading ${i + 1} of ${_capturedImages.length}...';
+          _uploadProgress =
+              'Uploading ${i + 1} of ${_capturedImages.length}...';
         });
 
         debugPrint('📤 Uploading image ${i + 1}/${_capturedImages.length}');
 
         try {
-          final fileId = await _uploadService.uploadPackingListImage(_capturedImages[i]);
+          final fileId = await _uploadService.uploadPackingListImage(
+            _capturedImages[i],
+          );
 
           if (fileId != null) {
             setState(() {
@@ -469,7 +501,9 @@ class _CameraScreenState extends State<CameraScreen> {
               context: context,
               builder: (context) => AlertDialog(
                 title: const Text('Upload Failed'),
-                content: Text('Failed to upload image ${i + 1}.\n\nError: $e\n\nContinue uploading remaining images?'),
+                content: Text(
+                  'Failed to upload image ${i + 1}.\n\nError: $e\n\nContinue uploading remaining images?',
+                ),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(context, false),
@@ -542,7 +576,9 @@ class _CameraScreenState extends State<CameraScreen> {
             context: context,
             builder: (context) => AlertDialog(
               title: const Text('Upload Incomplete'),
-              content: const Text('Some images were not uploaded. Exit anyway?'),
+              content: const Text(
+                'Some images were not uploaded. Exit anyway?',
+              ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
@@ -625,7 +661,10 @@ class _CameraScreenState extends State<CameraScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(8),
@@ -641,16 +680,14 @@ class _CameraScreenState extends State<CameraScreen> {
                     final label = camera.label ?? 'Camera $index';
                     return DropdownMenuItem<int>(
                       value: index,
-                      child: Text(
-                        label,
-                        style: const TextStyle(fontSize: 14),
-                      ),
+                      child: Text(label, style: const TextStyle(fontSize: 14)),
                     );
                   }).toList(),
                   onChanged: _isUploadingAll || !_isCameraReady
                       ? null
                       : (int? newIndex) {
-                          if (newIndex != null && newIndex != _currentCameraIndex) {
+                          if (newIndex != null &&
+                              newIndex != _currentCameraIndex) {
                             _selectCamera(newIndex);
                           }
                         },
@@ -776,7 +813,8 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Widget _buildPreview() {
-    if (_currentPreviewIndex < 0 || _currentPreviewIndex >= _capturedImageBytes.length) {
+    if (_currentPreviewIndex < 0 ||
+        _currentPreviewIndex >= _capturedImageBytes.length) {
       return const Center(
         child: Text(
           'No preview available',

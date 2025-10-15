@@ -34,8 +34,8 @@ class _CameraScreenState extends State<CameraScreen> {
   late html.VideoElement _videoElement;
   html.MediaStream? _cameraStream;
   bool _isCameraReady = false;
-  final String _videoElementId =
-      'camera-video-${DateTime.now().millisecondsSinceEpoch}';
+  String _videoElementId =
+      'camera-video-${DateTime.now().millisecondsSinceEpoch}'; // Remove 'final'
   int _cameraRebuildKey = 0; // Key to force HtmlElementView rebuild
   String? _currentDeviceId; // Track current camera device ID
   List<html.MediaDeviceInfo> _availableCameras =
@@ -155,7 +155,11 @@ class _CameraScreenState extends State<CameraScreen> {
       });
     }
 
-    // Create video element once
+    // Generate NEW unique ID for video element
+    final newVideoElementId =
+        'camera-video-${DateTime.now().millisecondsSinceEpoch}';
+
+    // Create NEW video element
     _videoElement = html.VideoElement()
       ..autoplay = true
       ..muted = true
@@ -164,17 +168,23 @@ class _CameraScreenState extends State<CameraScreen> {
       ..style.height = '100%'
       ..style.objectFit = 'cover';
 
-    // Register view factory (only once)
+    // Register NEW view factory with NEW ID
     // ignore: undefined_prefixed_name
     ui_web.platformViewRegistry.registerViewFactory(
-      _videoElementId,
+      newVideoElementId,
       (int viewId) => _videoElement,
     );
 
-    debugPrint('✅ Video element registered');
+    // Update the stored ID
+    setState(() {
+      _videoElementId = newVideoElementId;
+      _cameraRebuildKey++; // Increment key to force rebuild
+    });
 
-    // Enumerate cameras first, then start
-    _enumerateCameras().then((_) => _startCamera());
+    debugPrint('✅ Video element registered: $newVideoElementId');
+
+    // Start camera (no need to enumerate again, we already have the list)
+    _startCamera();
   }
 
   Future<void> _startCamera() async {
@@ -418,35 +428,27 @@ class _CameraScreenState extends State<CameraScreen> {
       return;
     }
 
-    final previousIndex = _currentCameraIndex;
-    debugPrint('🔄 Switching from camera index $previousIndex');
+    debugPrint('🔄 Switching camera...');
 
-    // Stop current stream
+    // Stop and dispose everything
     _stopCameraStream();
-
-    // Clear video element source
     _videoElement.srcObject = null;
 
-    // Move to next camera in the list (cycle through)
+    // Move to next camera
     _currentCameraIndex = (_currentCameraIndex + 1) % _availableCameras.length;
 
     setState(() {
-      _isCameraReady = false; // Show loading while switching
-      _cameraRebuildKey++; // Force HtmlElementView to rebuild
+      _isCameraReady = false;
+      _showCamera = false; // Hide camera view
     });
 
-    // Small delay to ensure UI updates
-    await Future.delayed(const Duration(milliseconds: 150));
+    // Wait for widget to unmount
+    await Future.delayed(const Duration(milliseconds: 100));
 
-    debugPrint('🔄 Switching to camera index $_currentCameraIndex');
-
-    // Restart camera with new device
-    await _startCamera();
-
-    debugPrint(
-      '✅ Camera switched to: ${_availableCameras[_currentCameraIndex].label}',
-    );
+    // Recreate everything from scratch
+    _setupCameraElement();
   }
+  // Update these methods in your _CameraScreenState class:
 
   Future<void> _selectCamera(int cameraIndex) async {
     if (cameraIndex < 0 || cameraIndex >= _availableCameras.length) {
@@ -456,25 +458,21 @@ class _CameraScreenState extends State<CameraScreen> {
 
     debugPrint('📹 Selecting camera index $cameraIndex');
 
-    // Stop current stream
+    // Stop and dispose everything
     _stopCameraStream();
-
-    // Clear video element source
     _videoElement.srcObject = null;
 
     setState(() {
       _currentCameraIndex = cameraIndex;
-      _isCameraReady = false; // Show loading while switching
-      _cameraRebuildKey++; // Force HtmlElementView to rebuild
+      _isCameraReady = false;
+      _showCamera = false; // Hide camera view
     });
 
-    // Small delay to ensure UI updates
-    await Future.delayed(const Duration(milliseconds: 150));
+    // Wait for widget to unmount
+    await Future.delayed(const Duration(milliseconds: 100));
 
-    // Restart camera with selected device
-    await _startCamera();
-
-    debugPrint('✅ Camera selected: ${_availableCameras[cameraIndex].label}');
+    // Recreate everything from scratch
+    _setupCameraElement();
   }
 
   // ==================== BATCH UPLOAD ====================
@@ -769,8 +767,10 @@ class _CameraScreenState extends State<CameraScreen> {
         return Stack(
           children: [
             HtmlElementView(
-              key: ValueKey(_cameraRebuildKey),
-              viewType: _videoElementId,
+              key: ValueKey(
+                '$_videoElementId-$_cameraRebuildKey',
+              ), // Use both for uniqueness
+              viewType: _videoElementId, // Use current video element ID
             ),
             // Camera flip button - only show if multiple cameras available
             if (_hasMultipleCameras)

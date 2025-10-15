@@ -30,6 +30,7 @@ class _CameraScreenState extends State<CameraScreen> {
   bool _isUploadingAll = false; // For batch upload
   String _uploadProgress = ''; // e.g., "Uploading 1 of 3"
   int _currentPreviewIndex = -1; // Index of image being previewed
+  bool _isSwitchingCamera = false;
 
   // Camera
   late html.VideoElement _videoElement;
@@ -592,12 +593,21 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _selectCamera(int cameraIndex) async {
+    if (_isSwitchingCamera) {
+      debugPrint('⚠️ Already switching camera, ignoring request');
+      return;
+    }
+
     if (cameraIndex < 0 || cameraIndex >= _availableCameras.length) {
       debugPrint('⚠️ Invalid camera index: $cameraIndex');
       return;
     }
 
     debugPrint('📹 Selecting camera index $cameraIndex');
+
+    setState(() {
+      _isSwitchingCamera = true;
+    });
 
     // Stop and dispose everything
     _stopCameraStream();
@@ -609,13 +619,20 @@ class _CameraScreenState extends State<CameraScreen> {
       _showCamera = false; // Hide camera view
     });
 
-    // Wait for widget to unmount
-    await Future.delayed(const Duration(milliseconds: 100));
+    // Wait for widget to unmount and dropdown to close
+    await Future.delayed(const Duration(milliseconds: 200));
 
     // Recreate everything from scratch with timeout
     try {
       await _setupCameraElementWithTimeout();
     } catch (e) {
+      // Reset state on failure
+      setState(() {
+        _isCameraReady = false;
+        _showCamera = false;
+        _isSwitchingCamera = false;
+      });
+
       if (mounted) {
         final shouldRetry = await showDialog<bool>(
           context: context,
@@ -644,13 +661,19 @@ class _CameraScreenState extends State<CameraScreen> {
           // Show camera selector or try next camera
           _tryNextAvailableCamera();
         } else {
-          // Go back
-          Navigator.pop(context);
+          // Reset to a working state - show the placeholder
+          setState(() {
+            _showCamera = false;
+            _isCameraReady = false;
+          });
         }
       }
+    } finally {
+      setState(() {
+        _isSwitchingCamera = false;
+      });
     }
   }
-  // ==================== BATCH UPLOAD ====================
 
   Future<void> _uploadAllImages() async {
     if (_capturedImages.isEmpty) return;
@@ -866,6 +889,7 @@ class _CameraScreenState extends State<CameraScreen> {
           // Camera selector dropdown
           // First, update the dropdown to always be enabled (not dependent on _isCameraReady)
           // In the _buildButtons section where you have the dropdown:
+          // Update the dropdown onChanged handler:
           if (_showCamera && _availableCameras.length > 1)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -892,13 +916,12 @@ class _CameraScreenState extends State<CameraScreen> {
                       child: Text(label, style: const TextStyle(fontSize: 14)),
                     );
                   }).toList(),
-                  onChanged:
-                      _isUploadingAll // Only disable during upload, not during camera init
+                  onChanged: (_isUploadingAll || _isSwitchingCamera)
                       ? null
                       : (int? newIndex) {
                           if (newIndex != null &&
                               newIndex != _currentCameraIndex) {
-                            _selectCamera(newIndex);
+                            Future.microtask(() => _selectCamera(newIndex));
                           }
                         },
                 ),

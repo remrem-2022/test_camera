@@ -68,26 +68,29 @@ class _CameraScreenState extends State<CameraScreen> {
         return;
       }
 
-      // 🔑 KEY FIX: Request permission first to get full device list with labels
+      // 🔑 Request permission first BUT DON'T STOP IT YET
+      html.MediaStream? permissionStream;
       try {
-        debugPrint('🔐 Requesting camera permission...');
-        final permissionStream = await mediaDevices.getUserMedia({
+        debugPrint('🔐 Requesting camera permission for enumeration...');
+        permissionStream = await mediaDevices.getUserMedia({
           'video': true,
+          'audio': false,
         });
-
-        // Stop the permission stream immediately - we just needed it to trigger permission
-        permissionStream.getTracks().forEach((track) => track.stop());
         debugPrint('✅ Camera permission granted');
-
-        // Small delay to ensure browser updates device list
-        await Future.delayed(const Duration(milliseconds: 100));
       } catch (e) {
         debugPrint('⚠️ Failed to get camera permission: $e');
-        // Continue anyway - might still get some devices
+        return; // Can't enumerate without permission
       }
 
-      // NOW enumerate devices - this will show all cameras with proper labels
+      // NOW enumerate devices while we still have the stream active
       final devices = await mediaDevices.enumerateDevices();
+
+      // NOW we can stop the permission stream
+      if (permissionStream != null) {
+        permissionStream.getTracks().forEach((track) => track.stop());
+        debugPrint('🛑 Permission stream stopped');
+      }
+
       _availableCameras = devices
           .whereType<html.MediaDeviceInfo>()
           .where((device) => device.kind == 'videoinput')
@@ -99,24 +102,36 @@ class _CameraScreenState extends State<CameraScreen> {
         debugPrint('  [$i] ${camera.label} (ID: ${camera.deviceId})');
       }
 
-      // Rest of your existing logic...
+      if (_availableCameras.isEmpty) {
+        debugPrint('❌ No cameras found!');
+        return;
+      }
+
+      // Find the best back-facing camera (prefer camera2 0, then any back camera)
       int? camera2_0_index;
       int? anyBackCameraIndex;
 
+      // Search through all cameras to find camera2 0 and any back camera
       for (var i = 0; i < _availableCameras.length; i++) {
         final label = _availableCameras[i].label?.toLowerCase() ?? '';
 
+        // Check for camera2 0 specifically
         if (label.contains('camera2 0') && label.contains('back')) {
           camera2_0_index = i;
-          break;
+          break; // Found the best camera, stop searching
         }
 
-        if (anyBackCameraIndex == null &&
-            (label.contains('back') || label.contains('environment'))) {
-          anyBackCameraIndex = i;
+        // Check for "camera 0" or just "back"
+        if (anyBackCameraIndex == null) {
+          if (label.contains('camera 0') && label.contains('back')) {
+            anyBackCameraIndex = i;
+          } else if (label.contains('back') || label.contains('environment')) {
+            anyBackCameraIndex = i;
+          }
         }
       }
 
+      // Set camera index with priority: camera2 0 > camera 0 back > any back camera > first camera (0)
       if (camera2_0_index != null) {
         _currentCameraIndex = camera2_0_index;
         debugPrint(
@@ -183,8 +198,19 @@ class _CameraScreenState extends State<CameraScreen> {
 
     debugPrint('✅ Video element registered: $newVideoElementId');
 
-    // Start camera (no need to enumerate again, we already have the list)
-    _startCamera();
+    // Enumerate cameras first (only if we haven't already)
+    if (_availableCameras.isEmpty) {
+      _enumerateCameras().then((_) {
+        if (_availableCameras.isNotEmpty) {
+          _startCamera();
+        } else {
+          debugPrint('❌ No cameras available after enumeration');
+        }
+      });
+    } else {
+      // Already have camera list, just start
+      _startCamera();
+    }
   }
 
   Future<void> _startCamera() async {

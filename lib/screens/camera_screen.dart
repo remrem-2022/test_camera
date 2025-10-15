@@ -38,6 +38,8 @@ class _CameraScreenState extends State<CameraScreen> {
   int _cameraRebuildKey = 0; // Key to force HtmlElementView rebuild
   String _facingMode = 'environment'; // 'environment' = back, 'user' = front
   String? _currentDeviceId; // Track current camera device ID
+  List<html.MediaDeviceInfo> _availableCameras = []; // List of available cameras
+  bool _hasMultipleCameras = false; // Whether device has multiple cameras
 
   @override
   void initState() {
@@ -55,6 +57,39 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   // ==================== CAMERA SETUP ====================
+
+  Future<void> _enumerateCameras() async {
+    try {
+      final mediaDevices = html.window.navigator.mediaDevices;
+      if (mediaDevices == null) {
+        debugPrint('⚠️ MediaDevices not available');
+        return;
+      }
+
+      final devices = await mediaDevices.enumerateDevices();
+      _availableCameras = devices
+          .whereType<html.MediaDeviceInfo>()
+          .where((device) => device.kind == 'videoinput')
+          .toList();
+
+      debugPrint('📹 Found ${_availableCameras.length} camera(s):');
+      for (var camera in _availableCameras) {
+        debugPrint('  - ${camera.label} (ID: ${camera.deviceId})');
+      }
+
+      setState(() {
+        _hasMultipleCameras = _availableCameras.length > 1;
+      });
+
+      if (_hasMultipleCameras) {
+        debugPrint('✅ Multiple cameras available - flip button will be shown');
+      } else {
+        debugPrint('⚠️ Only one camera available - flip button will be hidden');
+      }
+    } catch (e) {
+      debugPrint('❌ Error enumerating cameras: $e');
+    }
+  }
 
   void _setupCameraElement() {
     if (!_showCamera) {
@@ -81,8 +116,8 @@ class _CameraScreenState extends State<CameraScreen> {
 
     debugPrint('✅ Video element registered');
 
-    // Start camera
-    _startCamera();
+    // Enumerate cameras first, then start
+    _enumerateCameras().then((_) => _startCamera());
   }
 
   Future<void> _startCamera() async {
@@ -308,6 +343,11 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _switchCamera() async {
+    if (!_hasMultipleCameras) {
+      debugPrint('⚠️ Cannot switch - only one camera available');
+      return;
+    }
+
     final previousDeviceId = _currentDeviceId;
     debugPrint('🔄 Switching camera from $_facingMode (device: $previousDeviceId)');
 
@@ -320,20 +360,7 @@ class _CameraScreenState extends State<CameraScreen> {
     // Restart camera with new facing mode
     await _startCamera();
 
-    // Check if camera actually changed
-    if (_currentDeviceId == previousDeviceId && previousDeviceId != null) {
-      debugPrint('⚠️ Camera did not switch - same device ID');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Camera switching not available on this device'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } else {
-      debugPrint('✅ Camera switched to $_facingMode (device: $_currentDeviceId)');
-    }
+    debugPrint('✅ Camera switched to $_facingMode (device: $_currentDeviceId)');
   }
 
   // ==================== BATCH UPLOAD ====================
@@ -584,30 +611,31 @@ class _CameraScreenState extends State<CameraScreen> {
               key: ValueKey(_cameraRebuildKey),
               viewType: _videoElementId,
             ),
-            // Camera flip button
-            Positioned(
-              top: 16,
-              right: 16,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: _switchCamera,
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.flip_camera_android,
-                      color: Colors.white,
-                      size: 24,
+            // Camera flip button - only show if multiple cameras available
+            if (_hasMultipleCameras)
+              Positioned(
+                top: 16,
+                right: 16,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _switchCamera,
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.6),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.flip_camera_android,
+                        color: Colors.white,
+                        size: 24,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
           ],
         );
       } else {

@@ -265,7 +265,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
       setState(() {
         _isCameraReady = true;
-        _cameraRebuildKey++; // Increment to force widget rebuild
+        // Don't increment _cameraRebuildKey here anymore - it's done before calling this
       });
 
       debugPrint(
@@ -421,21 +421,22 @@ class _CameraScreenState extends State<CameraScreen> {
     final previousIndex = _currentCameraIndex;
     debugPrint('🔄 Switching from camera index $previousIndex');
 
-    // Stop current stream first
+    // Stop current stream
     _stopCameraStream();
 
     // Clear video element source
     _videoElement.srcObject = null;
 
-    // Small delay to ensure cleanup
-    await Future.delayed(const Duration(milliseconds: 50));
+    // Move to next camera in the list (cycle through)
+    _currentCameraIndex = (_currentCameraIndex + 1) % _availableCameras.length;
 
     setState(() {
       _isCameraReady = false; // Show loading while switching
+      _cameraRebuildKey++; // Force HtmlElementView to rebuild
     });
 
-    // Move to next camera in the list (cycle through)
-    _currentCameraIndex = (_currentCameraIndex + 1) % _availableCameras.length;
+    // Small delay to ensure UI updates
+    await Future.delayed(const Duration(milliseconds: 150));
 
     debugPrint('🔄 Switching to camera index $_currentCameraIndex');
 
@@ -455,19 +456,20 @@ class _CameraScreenState extends State<CameraScreen> {
 
     debugPrint('📹 Selecting camera index $cameraIndex');
 
-    // Stop current stream first
+    // Stop current stream
     _stopCameraStream();
 
     // Clear video element source
     _videoElement.srcObject = null;
 
-    // Small delay to ensure cleanup
-    await Future.delayed(const Duration(milliseconds: 100));
-
     setState(() {
       _currentCameraIndex = cameraIndex;
       _isCameraReady = false; // Show loading while switching
+      _cameraRebuildKey++; // Force HtmlElementView to rebuild
     });
+
+    // Small delay to ensure UI updates
+    await Future.delayed(const Duration(milliseconds: 150));
 
     // Restart camera with selected device
     await _startCamera();

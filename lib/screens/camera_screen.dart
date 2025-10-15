@@ -44,6 +44,8 @@ class _CameraScreenState extends State<CameraScreen> {
   bool _isSwitchingCamera = false;
   bool _isInitializing = false;
 
+  final FocusNode _dropdownFocusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
@@ -55,6 +57,7 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   void dispose() {
     _stopCameraStream();
+    _dropdownFocusNode.dispose();
     super.dispose();
   }
 
@@ -336,6 +339,10 @@ class _CameraScreenState extends State<CameraScreen> {
 
     debugPrint('📹 Selecting camera index $cameraIndex');
 
+    // FORCE unfocus everything
+    FocusScope.of(context).unfocus();
+    _dropdownFocusNode.unfocus();
+
     setState(() {
       _isSwitchingCamera = true;
     });
@@ -349,7 +356,7 @@ class _CameraScreenState extends State<CameraScreen> {
       _showCamera = false;
     });
 
-    await Future.delayed(const Duration(milliseconds: 250));
+    await Future.delayed(const Duration(milliseconds: 300)); // Increased delay
 
     try {
       await _setupCameraElementWithTimeout();
@@ -825,9 +832,11 @@ class _CameraScreenState extends State<CameraScreen> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
           ),
-          if (_showCamera && _availableCameras.length > 1)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Focus(
+              focusNode: _dropdownFocusNode,
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -856,12 +865,18 @@ class _CameraScreenState extends State<CameraScreen> {
                       : (int? newIndex) {
                           if (newIndex != null &&
                               newIndex != _currentCameraIndex) {
+                            // Unfocus the dropdown immediately
+                            _dropdownFocusNode.unfocus();
+                            FocusScope.of(context).unfocus();
+
+                            // Then switch camera
                             Future.microtask(() => _selectCamera(newIndex));
                           }
                         },
                 ),
               ),
             ),
+          ),
           const SizedBox(height: 8),
           Expanded(
             child: Container(

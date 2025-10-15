@@ -135,36 +135,30 @@ class _CameraScreenState extends State<CameraScreen> {
       // Request camera access with current facing mode
       debugPrint('📸 Requesting camera with facingMode: $_facingMode');
 
+      // First, try with ideal (not exact) to avoid NotReadableError
       try {
         _cameraStream = await mediaDevices.getUserMedia({
           'video': {
-            'facingMode': {'exact': _facingMode},
+            'facingMode': {'ideal': _facingMode},
             'width': {'ideal': 1920},
             'height': {'ideal': 1080},
           },
         });
-        debugPrint('✅ Got exact facingMode: $_facingMode');
+        debugPrint('✅ Got camera with ideal facingMode: $_facingMode');
       } catch (e) {
-        debugPrint('⚠️ Exact facingMode failed, trying ideal: $e');
-        // Fallback to ideal instead of exact
+        debugPrint('⚠️ Ideal facingMode failed: $e');
+        // If even ideal fails, try without facingMode constraint
         try {
           _cameraStream = await mediaDevices.getUserMedia({
             'video': {
-              'facingMode': {'ideal': _facingMode},
               'width': {'ideal': 1920},
               'height': {'ideal': 1080},
             },
           });
-          debugPrint('✅ Got ideal facingMode: $_facingMode');
+          debugPrint('⚠️ Using any available camera');
         } catch (e2) {
-          debugPrint('⚠️ Ideal facingMode also failed, using any camera: $e2');
-          // Last resort: any camera
-          _cameraStream = await mediaDevices.getUserMedia({
-            'video': {
-              'width': {'ideal': 1920},
-              'height': {'ideal': 1080},
-            },
-          });
+          debugPrint('❌ All camera attempts failed: $e2');
+          throw Exception('Could not access camera: $e2');
         }
       }
 

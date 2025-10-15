@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../core/services/file_upload_service.dart';
-import '../core/services/compressed_image_service.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({Key? key}) : super(key: key);
@@ -17,21 +16,18 @@ class CameraScreen extends StatefulWidget {
 
 class _CameraScreenState extends State<CameraScreen> {
   final FileUploadService _uploadService = FileUploadService();
-  final CompressedImageService _compressedImageService =
-      CompressedImageService();
 
   // Storage arrays for captured pages
   List<XFile> _capturedImages = [];
-  List<String> _uploadedFileIds = [];
-  List<String> _compressedUrls = [];
+  List<Uint8List> _capturedImageBytes = []; // Store original bytes for preview
+  List<String> _uploadedFileIds = []; // Empty string = pending, fileId = uploaded
 
   // UI State
-  bool _isUploading = false;
-  bool _showCamera = false; // Changed: control camera visibility
+  bool _showCamera = false;
   bool _showPreview = false;
-  String? _currentUploadingFileName;
-  Uint8List? _previewImageBytes;
-  String? _previewFileId;
+  bool _isUploadingAll = false; // For batch upload
+  String _uploadProgress = ''; // e.g., "Uploading 1 of 3"
+  int _currentPreviewIndex = -1; // Index of image being previewed
 
   // Camera
   late html.VideoElement _videoElement;
@@ -40,6 +36,7 @@ class _CameraScreenState extends State<CameraScreen> {
   final String _videoElementId =
       'camera-video-${DateTime.now().millisecondsSinceEpoch}';
   int _cameraRebuildKey = 0; // Key to force HtmlElementView rebuild
+  String _facingMode = 'environment'; // 'environment' = back, 'user' = front
 
   @override
   void initState() {
@@ -99,12 +96,11 @@ class _CameraScreenState extends State<CameraScreen> {
       // Stop existing stream if any
       _stopCameraStream();
 
-      // Request camera access
+      // Request camera access with current facing mode
       try {
-        // Try back camera first
         _cameraStream = await mediaDevices.getUserMedia({
           'video': {
-            'facingMode': 'environment',
+            'facingMode': {'ideal': _facingMode},
             'width': {'ideal': 1920},
             'height': {'ideal': 1080},
           },
@@ -164,7 +160,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
   // ==================== CAPTURE & PREVIEW ====================
 
-  Future<void> _captureAndUpload() async {
+  Future<void> _captureImage() async {
     if (!_isCameraReady || _cameraStream == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -176,10 +172,6 @@ class _CameraScreenState extends State<CameraScreen> {
     }
 
     try {
-      setState(() {
-        _isUploading = true;
-      });
-
       // Capture from video element
       final canvas = html.CanvasElement(
         width: _videoElement.videoWidth,
@@ -199,50 +191,32 @@ class _CameraScreenState extends State<CameraScreen> {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fileName = 'packing_list_$timestamp.jpg';
 
-      // Convert to XFile
+      // Convert to bytes
       final bytes = await _blobToBytes(blob);
+
+      // Create XFile
       final xFile = XFile.fromData(
         bytes,
         name: fileName,
         mimeType: 'image/jpeg',
       );
 
+      // Stop camera and show preview
+      _stopCameraStream();
+
+      // Add to lists (no upload yet)
+      _capturedImages.add(xFile);
+      _capturedImageBytes.add(bytes); // Store original bytes for preview
+      _uploadedFileIds.add(''); // Empty = pending upload
+
       setState(() {
-        _currentUploadingFileName = fileName;
+        _isCameraReady = false;
+        _showCamera = false;
+        _showPreview = true;
+        _currentPreviewIndex = _capturedImages.length - 1; // Preview the just-captured image
       });
 
-      // Upload first (don't add to list yet)
-      final fileId = await _uploadService.uploadPackingListImage(xFile);
-
-      if (fileId != null) {
-        debugPrint('✅ Uploaded: $fileId');
-
-        // Fetch compressed preview
-        final compressedBytes = await _compressedImageService
-            .fetchCompressedImageById(fileId);
-
-        // Stop camera and show preview
-        _stopCameraStream();
-
-        // Add to lists only after successful upload
-        _capturedImages.add(xFile);
-        _uploadedFileIds.add(fileId);
-        _compressedUrls.add('');
-
-        setState(() {
-          _isCameraReady = false;
-          _showCamera = false;
-          _showPreview = true;
-          _previewImageBytes = compressedBytes ?? bytes;
-          _previewFileId = fileId;
-          _currentUploadingFileName = null;
-        });
-
-        debugPrint('✅ Preview ready');
-      } else {
-        // Upload failed
-        throw Exception('Upload failed');
-      }
+      debugPrint('✅ Image captured (${_capturedImages.length} total)');
     } catch (e) {
       debugPrint('❌ Capture error: $e');
       if (mounted) {
@@ -250,10 +224,6 @@ class _CameraScreenState extends State<CameraScreen> {
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
-    } finally {
-      setState(() {
-        _isUploading = false;
-      });
     }
   }
 
@@ -268,8 +238,7 @@ class _CameraScreenState extends State<CameraScreen> {
     debugPrint('📄 Adding new page...');
     setState(() {
       _showPreview = false;
-      _previewImageBytes = null;
-      _previewFileId = null;
+      _currentPreviewIndex = -1;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupCameraElement();
@@ -277,29 +246,25 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   void _deleteCurrentPreview() {
-    if (_previewFileId != null) {
-      final index = _uploadedFileIds.indexOf(_previewFileId!);
-      if (index != -1) {
-        setState(() {
-          _capturedImages.removeAt(index);
-          _uploadedFileIds.removeAt(index);
-          _compressedUrls.removeAt(index);
-        });
+    if (_currentPreviewIndex >= 0 && _currentPreviewIndex < _capturedImages.length) {
+      setState(() {
+        _capturedImages.removeAt(_currentPreviewIndex);
+        _capturedImageBytes.removeAt(_currentPreviewIndex);
+        _uploadedFileIds.removeAt(_currentPreviewIndex);
+      });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Image deleted'),
-            duration: Duration(seconds: 1),
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Image deleted'),
+          duration: Duration(seconds: 1),
+        ),
+      );
     }
 
     // After deleting, hide preview and restart camera
     setState(() {
       _showPreview = false;
-      _previewImageBytes = null;
-      _previewFileId = null;
+      _currentPreviewIndex = -1;
     });
 
     // Restart camera for next capture
@@ -308,29 +273,175 @@ class _CameraScreenState extends State<CameraScreen> {
     });
   }
 
-  // ==================== NAVIGATION ====================
-
-  void _done() {
-    _stopCameraStream();
-    Navigator.pop(context, {
-      'images': _capturedImages,
-      'fileIds': _uploadedFileIds,
-      'compressedUrls': _compressedUrls,
+  void _switchCamera() {
+    // Toggle between front and back camera
+    setState(() {
+      _facingMode = _facingMode == 'environment' ? 'user' : 'environment';
     });
+
+    // Restart camera with new facing mode
+    _startCamera();
   }
 
-  void _back() {
+  // ==================== BATCH UPLOAD ====================
+
+  Future<void> _uploadAllImages() async {
+    if (_capturedImages.isEmpty) return;
+
+    setState(() {
+      _isUploadingAll = true;
+    });
+
+    try {
+      for (int i = 0; i < _capturedImages.length; i++) {
+        // Skip if already uploaded
+        if (_uploadedFileIds[i].isNotEmpty) {
+          debugPrint('⏭️ Skipping image $i (already uploaded)');
+          continue;
+        }
+
+        setState(() {
+          _uploadProgress = 'Uploading ${i + 1} of ${_capturedImages.length}...';
+        });
+
+        debugPrint('📤 Uploading image ${i + 1}/${_capturedImages.length}');
+
+        try {
+          final fileId = await _uploadService.uploadPackingListImage(_capturedImages[i]);
+
+          if (fileId != null) {
+            setState(() {
+              _uploadedFileIds[i] = fileId;
+            });
+            debugPrint('✅ Image ${i + 1} uploaded: $fileId');
+          } else {
+            throw Exception('Upload returned null for image ${i + 1}');
+          }
+        } catch (e) {
+          debugPrint('❌ Failed to upload image ${i + 1}: $e');
+
+          // Show error dialog and ask user if they want to continue
+          if (mounted) {
+            final shouldContinue = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Upload Failed'),
+                content: Text('Failed to upload image ${i + 1}.\n\nError: $e\n\nContinue uploading remaining images?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Continue'),
+                  ),
+                ],
+              ),
+            );
+
+            if (shouldContinue != true) {
+              throw Exception('Upload cancelled by user');
+            }
+          }
+        }
+      }
+
+      debugPrint('✅ All uploads complete');
+    } catch (e) {
+      debugPrint('❌ Batch upload error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Upload error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      rethrow;
+    } finally {
+      setState(() {
+        _isUploadingAll = false;
+        _uploadProgress = '';
+      });
+    }
+  }
+
+  // ==================== NAVIGATION ====================
+
+  Future<void> _done() async {
     _stopCameraStream();
-    // Return captured images even when going back
-    if (_capturedImages.isNotEmpty) {
+
+    if (_capturedImages.isEmpty) {
+      Navigator.pop(context);
+      return;
+    }
+
+    // Check if there are pending uploads
+    final hasPendingUploads = _uploadedFileIds.any((id) => id.isEmpty);
+
+    if (hasPendingUploads) {
+      try {
+        await _uploadAllImages();
+
+        // After successful upload, return data
+        if (mounted) {
+          Navigator.pop(context, {
+            'images': _capturedImages,
+            'fileIds': _uploadedFileIds,
+            'compressedUrls': List.filled(_uploadedFileIds.length, ''),
+          });
+        }
+      } catch (e) {
+        // Upload failed or cancelled, ask user what to do
+        if (mounted) {
+          final shouldExit = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Upload Incomplete'),
+              content: const Text('Some images were not uploaded. Exit anyway?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Stay'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Exit'),
+                ),
+              ],
+            ),
+          );
+
+          if (shouldExit == true && mounted) {
+            Navigator.pop(context, {
+              'images': _capturedImages,
+              'fileIds': _uploadedFileIds,
+              'compressedUrls': List.filled(_uploadedFileIds.length, ''),
+            });
+          }
+        }
+      }
+    } else {
+      // All already uploaded
       Navigator.pop(context, {
         'images': _capturedImages,
         'fileIds': _uploadedFileIds,
-        'compressedUrls': _compressedUrls,
+        'compressedUrls': List.filled(_uploadedFileIds.length, ''),
       });
-    } else {
-      Navigator.pop(context);
     }
+  }
+
+  Future<void> _back() async {
+    _stopCameraStream();
+
+    if (_capturedImages.isEmpty) {
+      Navigator.pop(context);
+      return;
+    }
+
+    // Same logic as _done()
+    await _done();
   }
 
   // ==================== UI ====================
@@ -392,7 +503,7 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Widget _buildMainContent() {
-    if (_isUploading) {
+    if (_isUploadingAll) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -400,9 +511,7 @@ class _CameraScreenState extends State<CameraScreen> {
             const CircularProgressIndicator(color: Colors.white),
             const SizedBox(height: 16),
             Text(
-              _currentUploadingFileName != null
-                  ? 'Uploading $_currentUploadingFileName...'
-                  : 'Processing...',
+              _uploadProgress.isNotEmpty ? _uploadProgress : 'Uploading...',
               style: const TextStyle(fontSize: 14, color: Colors.white),
             ),
           ],
@@ -416,9 +525,37 @@ class _CameraScreenState extends State<CameraScreen> {
 
     if (_showCamera) {
       if (_isCameraReady) {
-        return HtmlElementView(
-          key: ValueKey(_cameraRebuildKey),
-          viewType: _videoElementId,
+        return Stack(
+          children: [
+            HtmlElementView(
+              key: ValueKey(_cameraRebuildKey),
+              viewType: _videoElementId,
+            ),
+            // Camera flip button
+            Positioned(
+              top: 16,
+              right: 16,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _switchCamera,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.6),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.flip_camera_android,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
       } else {
         return const Center(
@@ -456,7 +593,7 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Widget _buildPreview() {
-    if (_previewImageBytes == null) {
+    if (_currentPreviewIndex < 0 || _currentPreviewIndex >= _capturedImageBytes.length) {
       return const Center(
         child: Text(
           'No preview available',
@@ -469,7 +606,7 @@ class _CameraScreenState extends State<CameraScreen> {
       children: [
         SizedBox.expand(
           child: Image.memory(
-            _previewImageBytes!,
+            _capturedImageBytes[_currentPreviewIndex],
             fit: BoxFit.cover,
           ),
         ),
@@ -502,7 +639,7 @@ class _CameraScreenState extends State<CameraScreen> {
     // Back button - always visible
     buttons.add(
       ElevatedButton(
-        onPressed: _isUploading ? null : _back,
+        onPressed: _isUploadingAll ? null : _back,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.white,
           foregroundColor: Colors.black,
@@ -517,9 +654,9 @@ class _CameraScreenState extends State<CameraScreen> {
       // Camera is active: [back, capture]
       buttons.add(
         ElevatedButton(
-          onPressed: (_isUploading || !_isCameraReady)
+          onPressed: (_isUploadingAll || !_isCameraReady)
               ? null
-              : _captureAndUpload,
+              : _captureImage,
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.white,
             foregroundColor: Colors.black,
@@ -533,7 +670,7 @@ class _CameraScreenState extends State<CameraScreen> {
       // Preview is showing or have captures: [back, done, add page]
       buttons.add(
         ElevatedButton(
-          onPressed: _isUploading ? null : _done,
+          onPressed: _isUploadingAll ? null : _done,
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.white,
             foregroundColor: Colors.black,
@@ -546,7 +683,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
       buttons.add(
         ElevatedButton(
-          onPressed: _isUploading ? null : _addPage,
+          onPressed: _isUploadingAll ? null : _addPage,
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.white,
             foregroundColor: Colors.black,
@@ -560,7 +697,7 @@ class _CameraScreenState extends State<CameraScreen> {
       // No captures yet: [back, add page]
       buttons.add(
         ElevatedButton(
-          onPressed: _isUploading ? null : _addPage,
+          onPressed: _isUploadingAll ? null : _addPage,
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.white,
             foregroundColor: Colors.black,

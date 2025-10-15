@@ -36,10 +36,10 @@ class _CameraScreenState extends State<CameraScreen> {
   final String _videoElementId =
       'camera-video-${DateTime.now().millisecondsSinceEpoch}';
   int _cameraRebuildKey = 0; // Key to force HtmlElementView rebuild
-  String _facingMode = 'environment'; // 'environment' = back, 'user' = front
   String? _currentDeviceId; // Track current camera device ID
   List<html.MediaDeviceInfo> _availableCameras = []; // List of available cameras
   bool _hasMultipleCameras = false; // Whether device has multiple cameras
+  int _currentCameraIndex = 0; // Index in available cameras list
 
   @override
   void initState() {
@@ -132,34 +132,48 @@ class _CameraScreenState extends State<CameraScreen> {
       // Stop existing stream if any
       _stopCameraStream();
 
-      // Request camera access with current facing mode
-      debugPrint('📸 Requesting camera with facingMode: $_facingMode');
+      // Request camera access using deviceId if we have cameras enumerated
+      if (_availableCameras.isNotEmpty && _currentCameraIndex < _availableCameras.length) {
+        final selectedCamera = _availableCameras[_currentCameraIndex];
+        debugPrint('📸 Requesting camera by deviceId: ${selectedCamera.deviceId}');
+        debugPrint('   Camera: ${selectedCamera.label}');
 
-      // First, try with ideal (not exact) to avoid NotReadableError
-      try {
-        _cameraStream = await mediaDevices.getUserMedia({
-          'video': {
-            'facingMode': {'ideal': _facingMode},
-            'width': {'ideal': 1920},
-            'height': {'ideal': 1080},
-          },
-        });
-        debugPrint('✅ Got camera with ideal facingMode: $_facingMode');
-      } catch (e) {
-        debugPrint('⚠️ Ideal facingMode failed: $e');
-        // If even ideal fails, try without facingMode constraint
         try {
           _cameraStream = await mediaDevices.getUserMedia({
             'video': {
+              'deviceId': {'exact': selectedCamera.deviceId},
               'width': {'ideal': 1920},
               'height': {'ideal': 1080},
             },
           });
-          debugPrint('⚠️ Using any available camera');
-        } catch (e2) {
-          debugPrint('❌ All camera attempts failed: $e2');
-          throw Exception('Could not access camera: $e2');
+          debugPrint('✅ Got camera: ${selectedCamera.label}');
+        } catch (e) {
+          debugPrint('⚠️ Failed to get camera by deviceId: $e');
+          // Try next camera in the list
+          if (_currentCameraIndex + 1 < _availableCameras.length) {
+            _currentCameraIndex++;
+            debugPrint('🔄 Trying next camera (index $_currentCameraIndex)');
+            return _startCamera(); // Retry with next camera
+          } else {
+            // All cameras failed, fall back to default
+            debugPrint('⚠️ All enumerated cameras failed, using default');
+            _cameraStream = await mediaDevices.getUserMedia({
+              'video': {
+                'width': {'ideal': 1920},
+                'height': {'ideal': 1080},
+              },
+            });
+          }
         }
+      } else {
+        // No cameras enumerated, use default
+        debugPrint('📸 Requesting default camera');
+        _cameraStream = await mediaDevices.getUserMedia({
+          'video': {
+            'width': {'ideal': 1920},
+            'height': {'ideal': 1080},
+          },
+        });
       }
 
       // Clear old stream and assign new one
@@ -337,24 +351,46 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _switchCamera() async {
-    if (!_hasMultipleCameras) {
-      debugPrint('⚠️ Cannot switch - only one camera available');
+    if (!_hasMultipleCameras || _availableCameras.isEmpty) {
+      debugPrint('⚠️ Cannot switch - no cameras available');
       return;
     }
 
-    final previousDeviceId = _currentDeviceId;
-    debugPrint('🔄 Switching camera from $_facingMode (device: $previousDeviceId)');
+    final previousIndex = _currentCameraIndex;
+    debugPrint('🔄 Switching from camera index $previousIndex');
 
-    // Toggle between front and back camera
     setState(() {
-      _facingMode = _facingMode == 'environment' ? 'user' : 'environment';
       _isCameraReady = false; // Show loading while switching
     });
 
-    // Restart camera with new facing mode
+    // Move to next camera in the list (cycle through)
+    _currentCameraIndex = (_currentCameraIndex + 1) % _availableCameras.length;
+
+    debugPrint('🔄 Switching to camera index $_currentCameraIndex');
+
+    // Restart camera with new device
     await _startCamera();
 
-    debugPrint('✅ Camera switched to $_facingMode (device: $_currentDeviceId)');
+    debugPrint('✅ Camera switched (device: $_currentDeviceId)');
+  }
+
+  Future<void> _selectCamera(int cameraIndex) async {
+    if (cameraIndex < 0 || cameraIndex >= _availableCameras.length) {
+      debugPrint('⚠️ Invalid camera index: $cameraIndex');
+      return;
+    }
+
+    debugPrint('📹 Selecting camera index $cameraIndex');
+
+    setState(() {
+      _currentCameraIndex = cameraIndex;
+      _isCameraReady = false; // Show loading while switching
+    });
+
+    // Restart camera with selected device
+    await _startCamera();
+
+    debugPrint('✅ Camera selected: ${_availableCameras[cameraIndex].label}');
   }
 
   // ==================== BATCH UPLOAD ====================
@@ -550,6 +586,45 @@ class _CameraScreenState extends State<CameraScreen> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
           ),
+
+          // Camera selector dropdown
+          if (_showCamera && _availableCameras.length > 1)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.black),
+                ),
+                child: DropdownButton<int>(
+                  value: _currentCameraIndex,
+                  isExpanded: true,
+                  underline: const SizedBox(),
+                  items: _availableCameras.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final camera = entry.value;
+                    final label = camera.label ?? '';
+                    return DropdownMenuItem<int>(
+                      value: index,
+                      child: Text(
+                        label.isNotEmpty ? label : 'Camera $index',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: _isUploadingAll || !_isCameraReady
+                      ? null
+                      : (int? newIndex) {
+                          if (newIndex != null && newIndex != _currentCameraIndex) {
+                            _selectCamera(newIndex);
+                          }
+                        },
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
 
           // Camera / Preview / Loading
           Expanded(

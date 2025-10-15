@@ -833,50 +833,54 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
 
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Focus(
-              focusNode: _dropdownFocusNode,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.black),
-                ),
-                child: DropdownButton<int>(
-                  value: _currentCameraIndex,
-                  isExpanded: true,
-                  underline: const SizedBox(),
-                  items: _availableCameras.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final camera = entry.value;
-                    final label = camera.label ?? 'Camera $index';
-                    return DropdownMenuItem<int>(
-                      value: index,
-                      child: Text(label, style: const TextStyle(fontSize: 14)),
-                    );
-                  }).toList(),
-                  onChanged: (_isUploadingAll || _isSwitchingCamera)
-                      ? null
-                      : (int? newIndex) {
-                          if (newIndex != null &&
-                              newIndex != _currentCameraIndex) {
-                            // Unfocus the dropdown immediately
-                            _dropdownFocusNode.unfocus();
-                            FocusScope.of(context).unfocus();
+          if (_showCamera && _availableCameras.length > 1)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Focus(
+                focusNode: _dropdownFocusNode,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.black),
+                  ),
+                  child: DropdownButton<int>(
+                    value: _currentCameraIndex,
+                    isExpanded: true,
+                    underline: const SizedBox(),
+                    items: _availableCameras.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final camera = entry.value;
+                      final label = camera.label ?? 'Camera $index';
+                      return DropdownMenuItem<int>(
+                        value: index,
+                        child: Text(
+                          label,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (_isUploadingAll || _isSwitchingCamera)
+                        ? null
+                        : (int? newIndex) {
+                            if (newIndex != null &&
+                                newIndex != _currentCameraIndex) {
+                              // Unfocus the dropdown immediately
+                              _dropdownFocusNode.unfocus();
+                              FocusScope.of(context).unfocus();
 
-                            // Then switch camera
-                            Future.microtask(() => _selectCamera(newIndex));
-                          }
-                        },
+                              // Then switch camera
+                              Future.microtask(() => _selectCamera(newIndex));
+                            }
+                          },
+                  ),
                 ),
               ),
             ),
-          ),
           const SizedBox(height: 8),
           Expanded(
             child: Container(

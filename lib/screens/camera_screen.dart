@@ -37,6 +37,7 @@ class _CameraScreenState extends State<CameraScreen> {
       'camera-video-${DateTime.now().millisecondsSinceEpoch}';
   int _cameraRebuildKey = 0; // Key to force HtmlElementView rebuild
   String _facingMode = 'environment'; // 'environment' = back, 'user' = front
+  String? _currentDeviceId; // Track current camera device ID
 
   @override
   void initState() {
@@ -97,22 +98,39 @@ class _CameraScreenState extends State<CameraScreen> {
       _stopCameraStream();
 
       // Request camera access with current facing mode
+      debugPrint('📸 Requesting camera with facingMode: $_facingMode');
+
       try {
         _cameraStream = await mediaDevices.getUserMedia({
           'video': {
-            'facingMode': {'ideal': _facingMode},
+            'facingMode': {'exact': _facingMode},
             'width': {'ideal': 1920},
             'height': {'ideal': 1080},
           },
         });
+        debugPrint('✅ Got exact facingMode: $_facingMode');
       } catch (e) {
-        // Fallback to any camera
-        _cameraStream = await mediaDevices.getUserMedia({
-          'video': {
-            'width': {'ideal': 1920},
-            'height': {'ideal': 1080},
-          },
-        });
+        debugPrint('⚠️ Exact facingMode failed, trying ideal: $e');
+        // Fallback to ideal instead of exact
+        try {
+          _cameraStream = await mediaDevices.getUserMedia({
+            'video': {
+              'facingMode': {'ideal': _facingMode},
+              'width': {'ideal': 1920},
+              'height': {'ideal': 1080},
+            },
+          });
+          debugPrint('✅ Got ideal facingMode: $_facingMode');
+        } catch (e2) {
+          debugPrint('⚠️ Ideal facingMode also failed, using any camera: $e2');
+          // Last resort: any camera
+          _cameraStream = await mediaDevices.getUserMedia({
+            'video': {
+              'width': {'ideal': 1920},
+              'height': {'ideal': 1080},
+            },
+          });
+        }
       }
 
       // Clear old stream and assign new one
@@ -125,6 +143,22 @@ class _CameraScreenState extends State<CameraScreen> {
 
       // Wait for video to be ready
       await Future.delayed(const Duration(milliseconds: 200));
+
+      // Log camera track info
+      if (_cameraStream != null) {
+        final tracks = _cameraStream!.getVideoTracks();
+        if (tracks.isNotEmpty) {
+          final track = tracks.first;
+          final settings = track.getSettings();
+          debugPrint('📹 Camera track settings: ${settings.toString()}');
+          debugPrint('📹 Actual facingMode: ${settings['facingMode']}');
+
+          // Store current device ID
+          final deviceId = settings['deviceId'] as String?;
+          _currentDeviceId = deviceId;
+          debugPrint('📹 Device ID: $deviceId');
+        }
+      }
 
       setState(() {
         _isCameraReady = true;
@@ -273,14 +307,33 @@ class _CameraScreenState extends State<CameraScreen> {
     });
   }
 
-  void _switchCamera() {
+  Future<void> _switchCamera() async {
+    final previousDeviceId = _currentDeviceId;
+    debugPrint('🔄 Switching camera from $_facingMode (device: $previousDeviceId)');
+
     // Toggle between front and back camera
     setState(() {
       _facingMode = _facingMode == 'environment' ? 'user' : 'environment';
+      _isCameraReady = false; // Show loading while switching
     });
 
     // Restart camera with new facing mode
-    _startCamera();
+    await _startCamera();
+
+    // Check if camera actually changed
+    if (_currentDeviceId == previousDeviceId && previousDeviceId != null) {
+      debugPrint('⚠️ Camera did not switch - same device ID');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Camera switching not available on this device'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } else {
+      debugPrint('✅ Camera switched to $_facingMode (device: $_currentDeviceId)');
+    }
   }
 
   // ==================== BATCH UPLOAD ====================

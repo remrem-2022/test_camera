@@ -69289,36 +69289,37 @@ break}s=3
 return A.R(p.mo(),$async$rC)
 case 3:case 1:return A.O(q,r)}})
 return A.P($async$rC,r)},
-O(a){var s,r,q,p,o,n,m,l,k,j=this,i=null,h=j.gV5(),g=A.amh(i,i,B.BP,i,i,h,i,i,i)
-if(j.w){s=j.e
+O(a){var s,r,q,p,o,n,m,l,k,j,i=this,h=null,g=i.gV5(),f=A.amh(h,h,B.BP,h,h,g,h,h,h)
+if(i.w){s=i.e
 r=s.length
 r=r===0?"Capture packing list first page":"Capturing page "+(r+1)
 q=r
 r=s
-s=q}else{s=j.x
-r=j.e
+s=q}else{s=i.x
+r=i.e
 p=r.length
-s=s?"Page "+p+" preview":""+p+" page(s) captured"}s=A.hR(s,i,i,i,B.LR,i,i)
-p=A.Di(8)
-o=A.ala(B.k,1)
-n=j.db
-m=j.cx
-m=new A.vT(m,A.a1(m).h("vT<1>"))
-m=m.gfp(m).fF(0,new A.aag(),t.kZ).df(0)
-l=j.y||j.dx?i:new A.aah(j,a)
-p=A.pc(!1,i,A.E1(new A.p1(m,n,l,B.Ka,!0,i,t.CB),new A.dV(B.j,i,o,p,i,i,B.b6),i,i,B.B9,i),i,i,i,j.fr,!0,i,i,i,i,i,i)
+s=s?"Page "+p+" preview":""+p+" page(s) captured"}p=t.E
+s=A.c([new A.cI(B.kD,A.hR(s,h,h,h,B.LR,h,h),h)],p)
+if(i.w&&i.cx.length>1){o=A.Di(8)
+n=A.ala(B.k,1)
+m=i.db
+l=i.cx
+l=new A.vT(l,A.a1(l).h("vT<1>"))
+l=l.gfp(l).fF(0,new A.aag(),t.kZ).df(0)
+k=i.y||i.dx?h:new A.aah(i,a)
+s.push(new A.cI(B.d6,A.pc(!1,h,A.E1(new A.p1(l,m,k,B.Ka,!0,h,t.CB),new A.dV(B.j,h,n,o,h,h,B.b6),h,h,B.B9,h),h,h,h,i.fr,!0,h,h,h,h,h,h),h))}s.push(B.K9)
 o=A.ala(B.k,2)
-o=A.VO(A.E1(j.Vj(),new A.dV(B.k,i,o,i,i,i,B.b6),i,B.d6,i,i))
-l=t.E
-k=A.c([],l)
-if(j.y)h=i
-k.push(A.uO(B.Pc,h,A.EM(i,i,B.j,i,i,i,i,i,i,B.k,i,i,B.d7,i,i,B.cN,i,i,i,i)))
-if(j.w){h=j.y||!j.ax||j.dx?i:j.gVA()
-k.push(A.uO(B.Pm,h,A.EM(i,i,B.j,i,i,i,i,i,i,B.k,i,i,B.d7,i,i,B.cN,i,i,i,i)))}else if(j.x||r.length!==0){h=j.y?i:j.gX1()
-k.push(A.uO(B.P5,h,A.EM(i,i,B.j,i,i,i,i,i,i,B.k,i,i,B.d7,i,i,B.cN,i,i,i,i)))
-h=j.y?i:j.gFs()
-k.push(A.uO(B.wm,h,A.EM(i,i,B.j,i,i,i,i,i,i,B.k,i,i,B.d7,i,i,B.cN,i,i,i,i)))}else{h=j.y?i:j.gFs()
-k.push(A.uO(B.wm,h,A.EM(i,i,B.j,i,i,i,i,i,i,B.k,i,i,B.d7,i,i,B.cN,i,i,i,i)))}return A.anA(new A.tE(g,B.P7,0,B.fR,B.k,new A.NX(i,i,1/0,56),i),B.fR,A.DW(A.c([new A.cI(B.kD,s,i),new A.cI(B.d6,p,i),B.K9,o,new A.cI(B.kD,A.a48(k,B.aw,B.hW,B.be),i)],l),B.aw,B.bx,B.be))},
+s.push(A.VO(A.E1(i.Vj(),new A.dV(B.k,h,o,h,h,h,B.b6),h,B.d6,h,h)))
+j=A.c([],p)
+if(i.y)g=h
+j.push(A.uO(B.Pc,g,A.EM(h,h,B.j,h,h,h,h,h,h,B.k,h,h,B.d7,h,h,B.cN,h,h,h,h)))
+if(i.w){g=i.y||!i.ax||i.dx?h:i.gVA()
+j.push(A.uO(B.Pm,g,A.EM(h,h,B.j,h,h,h,h,h,h,B.k,h,h,B.d7,h,h,B.cN,h,h,h,h)))}else if(i.x||r.length!==0){g=i.y?h:i.gX1()
+j.push(A.uO(B.P5,g,A.EM(h,h,B.j,h,h,h,h,h,h,B.k,h,h,B.d7,h,h,B.cN,h,h,h,h)))
+g=i.y?h:i.gFs()
+j.push(A.uO(B.wm,g,A.EM(h,h,B.j,h,h,h,h,h,h,B.k,h,h,B.d7,h,h,B.cN,h,h,h,h)))}else{g=i.y?h:i.gFs()
+j.push(A.uO(B.wm,g,A.EM(h,h,B.j,h,h,h,h,h,h,B.k,h,h,B.d7,h,h,B.cN,h,h,h,h)))}s.push(new A.cI(B.kD,A.a48(j,B.aw,B.hW,B.be),h))
+return A.anA(new A.tE(f,B.P7,0,B.fR,B.k,new A.NX(h,h,1/0,56),h),B.fR,A.DW(s,B.aw,B.bx,B.be))},
 Vj(){var s,r,q=this,p=null
 if(q.y){s=q.z
 return A.tV(A.DW(A.c([B.k_,B.iO,A.hR(s.length!==0?s:"Uploading...",p,p,p,B.Ow,p,p)],t.E),B.aw,B.cl,B.be),p,p)}if(q.x)return q.Vr()

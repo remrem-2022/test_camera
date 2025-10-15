@@ -78,14 +78,28 @@ class _CameraScreenState extends State<CameraScreen> {
         debugPrint('  [$i] ${camera.label} (ID: ${camera.deviceId})');
       }
 
-      // Find the first back-facing camera (prefer back camera initially)
+      // Find the best back-facing camera (prefer camera2 0, then any back camera)
       _currentCameraIndex = 0;
+
+      // First, look for "camera2 0" specifically (main back camera)
       for (var i = 0; i < _availableCameras.length; i++) {
         final label = _availableCameras[i].label?.toLowerCase() ?? '';
-        if (label.contains('back') || label.contains('environment')) {
+        if (label.contains('camera2 0') && label.contains('back')) {
           _currentCameraIndex = i;
-          debugPrint('🎯 Starting with back camera at index $_currentCameraIndex');
+          debugPrint('🎯 Starting with main back camera (camera2 0) at index $_currentCameraIndex');
           break;
+        }
+      }
+
+      // If camera2 0 not found, use any back-facing camera
+      if (_currentCameraIndex == 0) {
+        for (var i = 0; i < _availableCameras.length; i++) {
+          final label = _availableCameras[i].label?.toLowerCase() ?? '';
+          if (label.contains('back') || label.contains('environment')) {
+            _currentCameraIndex = i;
+            debugPrint('🎯 Starting with back camera at index $_currentCameraIndex');
+            break;
+          }
         }
       }
 

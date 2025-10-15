@@ -1,4 +1,5 @@
 // ignore: avoid_web_libraries_in_flutter
+import 'dart:async';
 import 'dart:html' as html;
 import 'dart:ui' as ui;
 import 'dart:ui_web' as ui_web;
@@ -210,6 +211,57 @@ class _CameraScreenState extends State<CameraScreen> {
     } else {
       // Already have camera list, just start
       _startCamera();
+    }
+  }
+
+  Future<void> _tryNextAvailableCamera() async {
+    final startIndex = _currentCameraIndex;
+
+    for (int attempt = 0; attempt < _availableCameras.length; attempt++) {
+      _currentCameraIndex =
+          (startIndex + attempt + 1) % _availableCameras.length;
+
+      debugPrint(
+        '🔄 Trying camera index $_currentCameraIndex (${_availableCameras[_currentCameraIndex].label})',
+      );
+
+      setState(() {
+        _isCameraReady = false;
+        _showCamera = false;
+      });
+
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      try {
+        await _setupCameraElementWithTimeout();
+        debugPrint('✅ Successfully switched to camera $_currentCameraIndex');
+        return; // Success!
+      } catch (e) {
+        debugPrint('❌ Failed to initialize camera $_currentCameraIndex: $e');
+        // Continue to next camera
+      }
+    }
+
+    // All cameras failed
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('No Available Cameras'),
+          content: const Text(
+            'Unable to initialize any camera. Please check your camera permissions and try again.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Close dialog
+                Navigator.pop(context); // Exit camera screen
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -471,10 +523,73 @@ class _CameraScreenState extends State<CameraScreen> {
     // Wait for widget to unmount
     await Future.delayed(const Duration(milliseconds: 100));
 
-    // Recreate everything from scratch
-    _setupCameraElement();
+    // Recreate everything from scratch with timeout
+    try {
+      await _setupCameraElementWithTimeout();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to switch to ${_availableCameras[_currentCameraIndex].label}. Trying next camera...',
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        // Try next camera automatically
+        _tryNextAvailableCamera();
+      }
+    }
   }
-  // Update these methods in your _CameraScreenState class:
+
+  Future<void> _setupCameraElementWithTimeout() async {
+    if (!_showCamera) {
+      setState(() {
+        _showCamera = true;
+      });
+    }
+
+    // Generate NEW unique ID for video element
+    final newVideoElementId =
+        'camera-video-${DateTime.now().millisecondsSinceEpoch}';
+
+    // Create NEW video element
+    _videoElement = html.VideoElement()
+      ..autoplay = true
+      ..muted = true
+      ..setAttribute('playsinline', 'true')
+      ..style.width = '100%'
+      ..style.height = '100%'
+      ..style.objectFit = 'cover';
+
+    // Register NEW view factory with NEW ID
+    // ignore: undefined_prefixed_name
+    ui_web.platformViewRegistry.registerViewFactory(
+      newVideoElementId,
+      (int viewId) => _videoElement,
+    );
+
+    // Update the stored ID
+    setState(() {
+      _videoElementId = newVideoElementId;
+      _cameraRebuildKey++; // Increment key to force rebuild
+    });
+
+    debugPrint('✅ Video element registered: $newVideoElementId');
+
+    // Start camera with 10 second timeout
+    await _startCamera().timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        debugPrint('⏱️ Camera initialization timeout');
+        _stopCameraStream();
+        throw TimeoutException(
+          'Camera initialization took too long (>10 seconds)',
+        );
+      },
+    );
+  }
 
   Future<void> _selectCamera(int cameraIndex) async {
     if (cameraIndex < 0 || cameraIndex >= _availableCameras.length) {
@@ -497,10 +612,44 @@ class _CameraScreenState extends State<CameraScreen> {
     // Wait for widget to unmount
     await Future.delayed(const Duration(milliseconds: 100));
 
-    // Recreate everything from scratch
-    _setupCameraElement();
-  }
+    // Recreate everything from scratch with timeout
+    try {
+      await _setupCameraElementWithTimeout();
+    } catch (e) {
+      if (mounted) {
+        final shouldRetry = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('Camera Initialization Failed'),
+            content: Text(
+              'Failed to initialize ${_availableCameras[cameraIndex].label}.\n\n'
+              'This camera might not be available or is being used by another app.\n\n'
+              'Would you like to try a different camera?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Try Different Camera'),
+              ),
+            ],
+          ),
+        );
 
+        if (shouldRetry == true) {
+          // Show camera selector or try next camera
+          _tryNextAvailableCamera();
+        } else {
+          // Go back
+          Navigator.pop(context);
+        }
+      }
+    }
+  }
   // ==================== BATCH UPLOAD ====================
 
   Future<void> _uploadAllImages() async {
@@ -592,8 +741,9 @@ class _CameraScreenState extends State<CameraScreen> {
 
   // ==================== NAVIGATION ====================
 
+  // Update _done to also reset state
   Future<void> _done() async {
-    _stopCameraStream();
+    _resetCameraState();
 
     if (_capturedImages.isEmpty) {
       Navigator.pop(context);
@@ -657,8 +807,19 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  Future<void> _back() async {
+  void _resetCameraState() {
     _stopCameraStream();
+    _videoElement.srcObject = null;
+
+    setState(() {
+      _isCameraReady = false;
+      _showCamera = false;
+    });
+  }
+
+  // Update the _back method to properly clean up
+  Future<void> _back() async {
+    _resetCameraState();
 
     if (_capturedImages.isEmpty) {
       Navigator.pop(context);
@@ -703,6 +864,8 @@ class _CameraScreenState extends State<CameraScreen> {
           ),
 
           // Camera selector dropdown
+          // First, update the dropdown to always be enabled (not dependent on _isCameraReady)
+          // In the _buildButtons section where you have the dropdown:
           if (_showCamera && _availableCameras.length > 1)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -729,7 +892,8 @@ class _CameraScreenState extends State<CameraScreen> {
                       child: Text(label, style: const TextStyle(fontSize: 14)),
                     );
                   }).toList(),
-                  onChanged: _isUploadingAll || !_isCameraReady
+                  onChanged:
+                      _isUploadingAll // Only disable during upload, not during camera init
                       ? null
                       : (int? newIndex) {
                           if (newIndex != null &&

@@ -73,8 +73,20 @@ class _CameraScreenState extends State<CameraScreen> {
           .toList();
 
       debugPrint('📹 Found ${_availableCameras.length} camera(s):');
-      for (var camera in _availableCameras) {
-        debugPrint('  - ${camera.label} (ID: ${camera.deviceId})');
+      for (var i = 0; i < _availableCameras.length; i++) {
+        final camera = _availableCameras[i];
+        debugPrint('  [$i] ${camera.label} (ID: ${camera.deviceId})');
+      }
+
+      // Find the first back-facing camera (prefer back camera initially)
+      _currentCameraIndex = 0;
+      for (var i = 0; i < _availableCameras.length; i++) {
+        final label = _availableCameras[i].label?.toLowerCase() ?? '';
+        if (label.contains('back') || label.contains('environment')) {
+          _currentCameraIndex = i;
+          debugPrint('🎯 Starting with back camera at index $_currentCameraIndex');
+          break;
+        }
       }
 
       setState(() {

@@ -44,8 +44,6 @@ class _CameraScreenState extends State<CameraScreen> {
   bool _isSwitchingCamera = false;
   bool _isInitializing = false;
 
-  final FocusNode _dropdownFocusNode = FocusNode();
-
   @override
   void initState() {
     super.initState();
@@ -57,7 +55,6 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   void dispose() {
     _stopCameraStream();
-    _dropdownFocusNode.dispose();
     super.dispose();
   }
 
@@ -339,10 +336,6 @@ class _CameraScreenState extends State<CameraScreen> {
 
     debugPrint('📹 Selecting camera index $cameraIndex');
 
-    // FORCE unfocus everything
-    FocusScope.of(context).unfocus();
-    _dropdownFocusNode.unfocus();
-
     setState(() {
       _isSwitchingCamera = true;
     });
@@ -356,7 +349,7 @@ class _CameraScreenState extends State<CameraScreen> {
       _showCamera = false;
     });
 
-    await Future.delayed(const Duration(milliseconds: 300)); // Increased delay
+    await Future.delayed(const Duration(milliseconds: 300));
 
     try {
       await _setupCameraElementWithTimeout();
@@ -518,6 +511,130 @@ class _CameraScreenState extends State<CameraScreen> {
         ),
       );
     }
+  }
+
+  // ==================== SHOW CAMERA MENU ====================
+
+  void _showCameraSelectionMenu() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Header
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    const Icon(Icons.videocam, size: 24),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Select Camera',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+              ),
+
+              const Divider(height: 1),
+
+              // Camera list
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _availableCameras.length,
+                itemBuilder: (context, index) {
+                  final camera = _availableCameras[index];
+                  final isSelected = index == _currentCameraIndex;
+                  final label = camera.label ?? 'Camera $index';
+
+                  return InkWell(
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (index != _currentCameraIndex) {
+                        _selectCamera(index);
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? Colors.blue.withOpacity(0.1)
+                            : Colors.transparent,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.camera_alt,
+                            color: isSelected ? Colors.blue : Colors.grey[600],
+                            size: 22,
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                color: isSelected ? Colors.blue : Colors.black,
+                              ),
+                            ),
+                          ),
+                          if (isSelected)
+                            const Icon(
+                              Icons.check_circle,
+                              color: Colors.blue,
+                              size: 22,
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   // ==================== CAPTURE & PREVIEW ====================
@@ -816,6 +933,16 @@ class _CameraScreenState extends State<CameraScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: _back,
         ),
+        actions: [
+          if (_showCamera && _availableCameras.length > 1)
+            IconButton(
+              icon: const Icon(Icons.menu),
+              onPressed: (_isUploadingAll || _isSwitchingCamera)
+                  ? null
+                  : _showCameraSelectionMenu,
+              tooltip: 'Select Camera',
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -833,55 +960,6 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
 
-          if (_showCamera && _availableCameras.length > 1)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Focus(
-                focusNode: _dropdownFocusNode,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.black),
-                  ),
-                  child: DropdownButton<int>(
-                    value: _currentCameraIndex,
-                    isExpanded: true,
-                    underline: const SizedBox(),
-                    items: _availableCameras.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final camera = entry.value;
-                      final label = camera.label ?? 'Camera $index';
-                      return DropdownMenuItem<int>(
-                        value: index,
-                        child: Text(
-                          label,
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (_isUploadingAll || _isSwitchingCamera)
-                        ? null
-                        : (int? newIndex) {
-                            if (newIndex != null &&
-                                newIndex != _currentCameraIndex) {
-                              // Unfocus the dropdown immediately
-                              _dropdownFocusNode.unfocus();
-                              FocusScope.of(context).unfocus();
-
-                              // Then switch camera
-                              Future.microtask(() => _selectCamera(newIndex));
-                            }
-                          },
-                  ),
-                ),
-              ),
-            ),
-          const SizedBox(height: 8),
           Expanded(
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),

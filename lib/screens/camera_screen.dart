@@ -245,13 +245,54 @@ class _CameraScreenState extends State<CameraScreen> {
         debugPrint('   Camera: ${selectedCamera.label}');
 
         try {
-          _cameraStream = await mediaDevices.getUserMedia({
+          // First, get camera with default settings to check capabilities
+          final tempStream = await mediaDevices.getUserMedia({
             'video': {
               'deviceId': {'exact': selectedCamera.deviceId},
-              'width': {'ideal': 1920},
-              'height': {'ideal': 1080},
             },
           });
+
+          // Read the actual settings the camera provides
+          final tracks = tempStream.getVideoTracks();
+          Map<String, dynamic>? actualSettings;
+          if (tracks.isNotEmpty) {
+            final track = tracks.first;
+            actualSettings = Map<String, dynamic>.from(track.getSettings());
+            debugPrint('📹 Camera default settings: ${actualSettings.toString()}');
+          }
+
+          // Stop the temporary stream
+          tempStream.getTracks().forEach((track) => track.stop());
+
+          // Now request camera again with the settings we discovered
+          if (actualSettings != null) {
+            final width = actualSettings['width'];
+            final height = actualSettings['height'];
+            final aspectRatio = actualSettings['aspectRatio'];
+            final frameRate = actualSettings['frameRate'];
+
+            debugPrint('🎯 Requesting camera with native settings:');
+            debugPrint('   Width: $width, Height: $height');
+            debugPrint('   Aspect Ratio: $aspectRatio, Frame Rate: $frameRate');
+
+            _cameraStream = await mediaDevices.getUserMedia({
+              'video': {
+                'deviceId': {'exact': selectedCamera.deviceId},
+                if (width != null) 'width': {'ideal': width},
+                if (height != null) 'height': {'ideal': height},
+                if (aspectRatio != null) 'aspectRatio': {'ideal': aspectRatio},
+                if (frameRate != null) 'frameRate': {'ideal': frameRate},
+              },
+            });
+          } else {
+            // Fallback if we couldn't get settings
+            _cameraStream = await mediaDevices.getUserMedia({
+              'video': {
+                'deviceId': {'exact': selectedCamera.deviceId},
+              },
+            });
+          }
+
           debugPrint('✅ Got camera: ${selectedCamera.label}');
         } catch (e) {
           debugPrint('⚠️ Failed to get camera by deviceId: $e');
@@ -260,10 +301,7 @@ class _CameraScreenState extends State<CameraScreen> {
       } else {
         debugPrint('📸 Requesting default camera');
         _cameraStream = await mediaDevices.getUserMedia({
-          'video': {
-            'width': {'ideal': 1920},
-            'height': {'ideal': 1080},
-          },
+          'video': true,
         });
       }
 
@@ -279,7 +317,7 @@ class _CameraScreenState extends State<CameraScreen> {
         if (tracks.isNotEmpty) {
           final track = tracks.first;
           final settings = track.getSettings();
-          debugPrint('📹 Camera track settings: ${settings.toString()}');
+          debugPrint('📹 Final camera track settings: ${settings.toString()}');
           debugPrint('📹 Actual facingMode: ${settings['facingMode']}');
 
           final deviceId = settings['deviceId'] as String?;
@@ -651,17 +689,21 @@ class _CameraScreenState extends State<CameraScreen> {
     }
 
     try {
-      final canvas = html.CanvasElement(
-        width: _videoElement.videoWidth,
-        height: _videoElement.videoHeight,
-      );
+      // Get video dimensions - capture full frame without cropping
+      final videoWidth = _videoElement.videoWidth;
+      final videoHeight = _videoElement.videoHeight;
 
+      debugPrint('📸 Capturing image at native resolution: ${videoWidth}x${videoHeight}');
+
+      final canvas = html.CanvasElement(width: videoWidth, height: videoHeight);
+
+      // Draw the entire video frame to canvas
       canvas.context2D.drawImageScaled(
         _videoElement,
         0,
         0,
-        canvas.width!,
-        canvas.height!,
+        videoWidth,
+        videoHeight,
       );
 
       final blob = await canvas.toBlob('image/jpeg', 0.95);
@@ -689,7 +731,7 @@ class _CameraScreenState extends State<CameraScreen> {
         _currentPreviewIndex = _capturedImages.length - 1;
       });
 
-      debugPrint('✅ Image captured (${_capturedImages.length} total)');
+      debugPrint('✅ Image captured at ${videoWidth}x${videoHeight}');
     } catch (e) {
       debugPrint('❌ Capture error: $e');
       if (mounted) {

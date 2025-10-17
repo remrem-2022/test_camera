@@ -67968,7 +67968,7 @@ var $async$nV=A.M(function(a2,a3){if(a2===1){o.push(a3)
 s=p}while(true)switch(s){case 0:p=4
 f=a1.b
 A.aI().$1("\ud83d\udce4 Uploading packing list image: "+f)
-n=A.h5("http://localhost:3000/LTLFiles/uploadFile")
+n=A.h5("https://ltlappbackend-staging.onrender.com/LTLFiles/uploadFile")
 m=A.awM("POST",n)
 s=7
 return A.N(a1.CF(),$async$nV)
